@@ -333,3 +333,192 @@ func TestMultipleErrorsCollected(t *testing.T) {
 		t.Fatalf("expected both HOST and PORT errors, got: %s", errStr)
 	}
 }
+
+// --- Pointer-to-struct nil when no env vars set (Task #428) ---
+
+func TestPointerToStructNilWhenNoEnvVars(t *testing.T) {
+	type DB struct {
+		Host string
+		Port int
+	}
+	type Config struct {
+		Database *DB
+	}
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database != nil {
+		t.Fatalf("expected nil pointer when no env vars set, got %+v", c.Database)
+	}
+}
+
+func TestPointerToStructSetWhenPartialEnvVars(t *testing.T) {
+	type DB struct {
+		Host string
+		Port int
+	}
+	type Config struct {
+		Database *DB
+	}
+	setEnv(t, "APP_DATABASE_HOST", "partial.local")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database == nil {
+		t.Fatal("expected non-nil pointer when env var is set")
+	}
+	if c.Database.Host != "partial.local" {
+		t.Fatalf("expected 'partial.local', got %q", c.Database.Host)
+	}
+}
+
+// --- CamelCase to UPPER_SNAKE_CASE (Task #429) ---
+
+func TestCamelCaseFieldName(t *testing.T) {
+	type Config struct {
+		DatabaseURL string
+	}
+	setEnv(t, "APP_DATABASE_URL", "postgres://localhost")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.DatabaseURL != "postgres://localhost" {
+		t.Fatalf("expected 'postgres://localhost', got %q", c.DatabaseURL)
+	}
+}
+
+func TestCamelCaseMultiWord(t *testing.T) {
+	type Config struct {
+		MaxRetryCount int
+	}
+	setEnv(t, "MAX_RETRY_COUNT", "5")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.MaxRetryCount != 5 {
+		t.Fatalf("expected 5, got %d", c.MaxRetryCount)
+	}
+}
+
+// --- envDefault tag (Task #429) ---
+
+func TestEnvDefaultTag(t *testing.T) {
+	type Config struct {
+		Port int `envDefault:"5000"`
+	}
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Port != 5000 {
+		t.Fatalf("expected 5000, got %d", c.Port)
+	}
+}
+
+func TestEnvDefaultOverriddenByEnv(t *testing.T) {
+	type Config struct {
+		Port int `envDefault:"5000"`
+	}
+	setEnv(t, "APP_PORT", "9090")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Port != 9090 {
+		t.Fatalf("expected 9090, got %d", c.Port)
+	}
+}
+
+func TestDefaultTagTakesPrecedenceOverEnvDefault(t *testing.T) {
+	type Config struct {
+		Port int `default:"3000" envDefault:"5000"`
+	}
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Port != 3000 {
+		t.Fatalf("expected 3000 (default takes precedence), got %d", c.Port)
+	}
+}
+
+// --- envSeparator tag (Task #429) ---
+
+func TestEnvSeparatorTag(t *testing.T) {
+	type Config struct {
+		Paths []string `envSeparator:":"`
+	}
+	setEnv(t, "PATHS", "/usr/bin:/usr/local/bin:/home/user/bin")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(c.Paths) != 3 || c.Paths[0] != "/usr/bin" || c.Paths[2] != "/home/user/bin" {
+		t.Fatalf("expected 3 paths, got %v", c.Paths)
+	}
+}
+
+func TestEnvSeparatorDefaultComma(t *testing.T) {
+	type Config struct {
+		Tags []string
+	}
+	setEnv(t, "TAGS", "a,b,c")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(c.Tags) != 3 {
+		t.Fatalf("expected 3 tags, got %v", c.Tags)
+	}
+}
+
+// --- envExpand tag (Task #429) ---
+
+func TestEnvExpandTag(t *testing.T) {
+	type Config struct {
+		DataDir string `envExpand:"true"`
+	}
+	setEnv(t, "HOME", "/home/testuser")
+	setEnv(t, "DATA_DIR", "$HOME/data")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.DataDir != "/home/testuser/data" {
+		t.Fatalf("expected '/home/testuser/data', got %q", c.DataDir)
+	}
+}
+
+func TestEnvExpandDisabledByDefault(t *testing.T) {
+	type Config struct {
+		Val string
+	}
+	setEnv(t, "VAL", "$HOME/data")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Val != "$HOME/data" {
+		t.Fatalf("expected literal '$HOME/data', got %q", c.Val)
+	}
+}
+
+// --- Empty slice decode ---
+
+func TestDecodeEmptySlice(t *testing.T) {
+	type Config struct {
+		Hosts []string
+	}
+	setEnv(t, "HOSTS", "")
+	var c Config
+	if err := Process("", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(c.Hosts) != 0 {
+		t.Fatalf("expected empty slice, got %v", c.Hosts)
+	}
+}

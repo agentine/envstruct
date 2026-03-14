@@ -30,14 +30,15 @@ var (
 )
 
 // decode sets a reflect.Value from a string value.
+// separator is used for splitting slice values.
 // It returns a ParseError if decoding fails.
-func decode(fv reflect.Value, val string, fieldName string, envVar string) error {
+func decode(fv reflect.Value, val string, fieldName string, envVar string, separator string) error {
 	// Handle pointer: allocate and decode the element.
 	if fv.Kind() == reflect.Ptr {
 		if fv.IsNil() {
 			fv.Set(reflect.New(fv.Type().Elem()))
 		}
-		return decode(fv.Elem(), val, fieldName, envVar)
+		return decode(fv.Elem(), val, fieldName, envVar, separator)
 	}
 
 	// Check interfaces on pointer-to-value (to catch pointer receivers).
@@ -82,7 +83,7 @@ func decode(fv reflect.Value, val string, fieldName string, envVar string) error
 
 	// Slices.
 	if ft.Kind() == reflect.Slice {
-		return decodeSlice(fv, val, fieldName, envVar)
+		return decodeSlice(fv, val, fieldName, envVar, separator)
 	}
 
 	// Maps.
@@ -128,12 +129,16 @@ func decodeScalar(fv reflect.Value, val string, fieldName string, envVar string)
 	return nil
 }
 
-func decodeSlice(fv reflect.Value, val string, fieldName string, envVar string) error {
-	parts := strings.Split(val, ",")
+func decodeSlice(fv reflect.Value, val string, fieldName string, envVar string, separator string) error {
+	if val == "" {
+		fv.Set(reflect.MakeSlice(fv.Type(), 0, 0))
+		return nil
+	}
+	parts := strings.Split(val, separator)
 	slice := reflect.MakeSlice(fv.Type(), len(parts), len(parts))
 	for i, part := range parts {
 		part = strings.TrimSpace(part)
-		if err := decode(slice.Index(i), part, fieldName, envVar); err != nil {
+		if err := decode(slice.Index(i), part, fieldName, envVar, ","); err != nil {
 			return err
 		}
 	}
@@ -152,11 +157,11 @@ func decodeMap(fv reflect.Value, val string, fieldName string, envVar string) er
 				fmt.Errorf("expected key=value pair, got %q", pair))
 		}
 		key := reflect.New(fv.Type().Key()).Elem()
-		if err := decode(key, strings.TrimSpace(kv[0]), fieldName, envVar); err != nil {
+		if err := decode(key, strings.TrimSpace(kv[0]), fieldName, envVar, ","); err != nil {
 			return err
 		}
 		value := reflect.New(fv.Type().Elem()).Elem()
-		if err := decode(value, strings.TrimSpace(kv[1]), fieldName, envVar); err != nil {
+		if err := decode(value, strings.TrimSpace(kv[1]), fieldName, envVar, ","); err != nil {
 			return err
 		}
 		m.SetMapIndex(key, value)

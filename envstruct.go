@@ -10,8 +10,22 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 )
+
+// gatherRegexp splits CamelCase into word groups.
+// Matches kelseyhightower/envconfig's word-boundary logic.
+var gatherRegexp = regexp.MustCompile("([^A-Z]+|[A-Z]+[^A-Z]*)")
+
+// camelToUpperSnake converts a CamelCase name to UPPER_SNAKE_CASE.
+func camelToUpperSnake(s string) string {
+	parts := gatherRegexp.FindAllString(s, -1)
+	for i, part := range parts {
+		parts[i] = strings.ToUpper(part)
+	}
+	return strings.Join(parts, "_")
+}
 
 // Process populates the struct pointed to by spec with values from
 // environment variables. The prefix is prepended to each field name
@@ -25,7 +39,8 @@ func Process(prefix string, spec interface{}) error {
 	if rv.Kind() != reflect.Struct {
 		return fmt.Errorf("envstruct: spec must be a pointer to a struct")
 	}
-	return processStruct(prefix, rv)
+	_, err := processStruct(prefix, rv)
+	return err
 }
 
 // isStructField returns true if the field type is a struct that should be
@@ -51,9 +66,10 @@ func isStructField(ft reflect.Type) bool {
 	return true
 }
 
-func processStruct(prefix string, rv reflect.Value) error {
+func processStruct(prefix string, rv reflect.Value) (bool, error) {
 	rt := rv.Type()
 	var errs []error
+	anySet := false
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		fv := rv.Field(i)
@@ -64,7 +80,7 @@ func processStruct(prefix string, rv reflect.Value) error {
 		}
 
 		// Build the env var name component from the field name.
-		envName := strings.ToUpper(f.Name)
+		envName := camelToUpperSnake(f.Name)
 		spec := parseTag(f, envName)
 		if spec.Ignored {
 			continue
@@ -86,14 +102,21 @@ func processStruct(prefix string, rv reflect.Value) error {
 				// Pointer-to-struct: allocate temp, recurse, assign only if
 				// at least one env var was set.
 				tmp := reflect.New(f.Type.Elem())
-				if err := processStruct(nestedPrefix, tmp.Elem()); err != nil {
+				set, err := processStruct(nestedPrefix, tmp.Elem())
+				if err != nil {
 					errs = append(errs, err)
-				} else {
+				}
+				if set {
 					fv.Set(tmp)
+					anySet = true
 				}
 			} else {
-				if err := processStruct(nestedPrefix, fv); err != nil {
+				set, err := processStruct(nestedPrefix, fv)
+				if err != nil {
 					errs = append(errs, err)
+				}
+				if set {
+					anySet = true
 				}
 			}
 			continue
@@ -123,12 +146,25 @@ func processStruct(prefix string, rv reflect.Value) error {
 			continue
 		}
 
+		// Apply envExpand: expand $VAR references in the value.
+		if spec.Expand {
+			val = os.ExpandEnv(val)
+		}
+
+		// Determine separator for slice decoding.
+		sep := spec.Separator
+		if sep == "" {
+			sep = ","
+		}
+
 		// Decode and set the field value.
-		if err := decode(fv, val, f.Name, key); err != nil {
+		if err := decode(fv, val, f.Name, key, sep); err != nil {
 			errs = append(errs, err)
+		} else {
+			anySet = true
 		}
 	}
-	return errors.Join(errs...)
+	return anySet, errors.Join(errs...)
 }
 
 // MustProcess is like Process but panics on error.

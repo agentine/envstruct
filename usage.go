@@ -15,7 +15,7 @@ func usageStruct(prefix string, rt reflect.Type, tw *tabwriter.Writer) {
 			continue
 		}
 
-		envName := strings.ToUpper(f.Name)
+		envName := camelToUpperSnake(f.Name)
 		spec := parseTag(f, envName)
 		if spec.Ignored {
 			continue

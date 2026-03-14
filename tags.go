@@ -13,6 +13,8 @@ type fieldSpec struct {
 	HasDefault   bool
 	Ignored      bool
 	Description  string
+	Separator    string // custom separator for slices (envSeparator tag)
+	Expand       bool   // expand env var references via os.ExpandEnv (envExpand tag)
 }
 
 // parseTag extracts a fieldSpec from a struct field's tags.
@@ -44,10 +46,23 @@ func parseTag(f reflect.StructField, fieldName string) fieldSpec {
 		}
 	}
 
-	// Check default tag.
+	// Check default tag, then envDefault for envconfig compat.
 	if defVal, ok := f.Tag.Lookup("default"); ok {
 		spec.DefaultValue = defVal
 		spec.HasDefault = true
+	} else if defVal, ok := f.Tag.Lookup("envDefault"); ok {
+		spec.DefaultValue = defVal
+		spec.HasDefault = true
+	}
+
+	// Check envSeparator tag (custom slice separator).
+	if sep, ok := f.Tag.Lookup("envSeparator"); ok {
+		spec.Separator = sep
+	}
+
+	// Check envExpand tag (expand env var references in values).
+	if exp, ok := f.Tag.Lookup("envExpand"); ok && exp == "true" {
+		spec.Expand = true
 	}
 
 	// Check desc tag.
