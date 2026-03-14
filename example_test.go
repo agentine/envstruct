@@ -2,11 +2,17 @@ package envstruct_test
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/agentine/envstruct"
 )
 
 func ExampleProcess() {
+	os.Setenv("APP_HOST", "localhost")
+	os.Setenv("APP_PORT", "8080")
+	defer os.Unsetenv("APP_HOST")
+	defer os.Unsetenv("APP_PORT")
+
 	type Config struct {
 		Host string
 		Port int
@@ -17,6 +23,56 @@ func ExampleProcess() {
 		fmt.Println("error:", err)
 		return
 	}
-	fmt.Println("ok")
-	// Output: ok
+	fmt.Printf("Host=%s Port=%d\n", c.Host, c.Port)
+	// Output: Host=localhost Port=8080
+}
+
+func ExampleProcess_nested() {
+	os.Setenv("APP_DATABASE_HOST", "db.local")
+	os.Setenv("APP_DATABASE_PORT", "5432")
+	defer os.Unsetenv("APP_DATABASE_HOST")
+	defer os.Unsetenv("APP_DATABASE_PORT")
+
+	type DB struct {
+		Host string
+		Port int
+	}
+	type Config struct {
+		Database DB
+	}
+	var c Config
+	err := envstruct.Process("APP", &c)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("DB=%s:%d\n", c.Database.Host, c.Database.Port)
+	// Output: DB=db.local:5432
+}
+
+func ExampleProcess_required() {
+	type Config struct {
+		Secret string `env:"SECRET,required"`
+	}
+	var c Config
+	err := envstruct.Process("APP", &c)
+	if err != nil {
+		fmt.Println("got expected error")
+		return
+	}
+	fmt.Println("unexpected success")
+	// Output: got expected error
+}
+
+func ExampleUsage() {
+	type Config struct {
+		Host  string `default:"localhost" desc:"Server hostname"`
+		Port  int    `default:"8080" desc:"Server port"`
+		Debug bool   `desc:"Enable debug mode"`
+	}
+	envstruct.Usage("APP", &Config{}, os.Stdout)
+	// Output:
+	//   APP_HOST   string  [default: localhost]  Server hostname
+	//   APP_PORT   int     [default: 8080]       Server port
+	//   APP_DEBUG  bool                          Enable debug mode
 }

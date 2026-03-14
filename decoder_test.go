@@ -358,3 +358,98 @@ func TestDecodeBoolParseError(t *testing.T) {
 		t.Fatalf("expected ParseError, got %T", err)
 	}
 }
+
+type testTextUnmarshaler struct{ val string }
+
+func (u *testTextUnmarshaler) UnmarshalText(text []byte) error {
+	u.val = "unmarshaled:" + string(text)
+	return nil
+}
+
+func TestDecodeTextUnmarshaler(t *testing.T) {
+	type C struct{ TU testTextUnmarshaler }
+	t.Setenv("TU", "hello")
+	var c C
+	if err := Process("", &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.TU.val != "unmarshaled:hello" {
+		t.Fatalf("got %q", c.TU.val)
+	}
+}
+
+func TestParseErrorString(t *testing.T) {
+	pe := &ParseError{
+		FieldName: "Port",
+		EnvVar:    "APP_PORT",
+		Value:     "abc",
+		TypeName:  "int",
+		Err:       errors.New("invalid syntax"),
+	}
+	s := pe.Error()
+	if s == "" {
+		t.Fatal("empty error string")
+	}
+	if pe.Unwrap() == nil {
+		t.Fatal("expected non-nil unwrap")
+	}
+}
+
+func TestRequiredErrorString(t *testing.T) {
+	re := &RequiredError{
+		FieldName: "Host",
+		EnvVar:    "APP_HOST",
+	}
+	s := re.Error()
+	if s == "" {
+		t.Fatal("empty error string")
+	}
+}
+
+func TestDecodeMapBadFormat(t *testing.T) {
+	type C struct{ Labels map[string]string }
+	t.Setenv("LABELS", "noequals")
+	var c C
+	err := Process("", &c)
+	if err == nil {
+		t.Fatal("expected error for bad map format")
+	}
+}
+
+func TestDecodeFloatParseError(t *testing.T) {
+	type C struct{ Val float64 }
+	t.Setenv("VAL", "not-a-float")
+	var c C
+	err := Process("", &c)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestDecodeUintParseError(t *testing.T) {
+	type C struct{ Val uint }
+	t.Setenv("VAL", "-1")
+	var c C
+	err := Process("", &c)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestDecodeDurationParseError(t *testing.T) {
+	type C struct{ Val time.Duration }
+	t.Setenv("VAL", "not-a-duration")
+	var c C
+	err := Process("", &c)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestProcessNonStructPointer(t *testing.T) {
+	s := "hello"
+	err := Process("", &s)
+	if err == nil {
+		t.Fatal("expected error for non-struct pointer")
+	}
+}
