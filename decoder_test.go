@@ -395,6 +395,33 @@ func TestParseErrorString(t *testing.T) {
 	}
 }
 
+func TestParseErrorUnwrapChain(t *testing.T) {
+	type C struct{ Port int }
+	t.Setenv("PORT", "xyz")
+	var c C
+	err := Process("", &c)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected ParseError, got %T", err)
+	}
+	if pe.FieldName != "Port" {
+		t.Fatalf("expected field Port, got %q", pe.FieldName)
+	}
+	if pe.EnvVar != "PORT" {
+		t.Fatalf("expected env PORT, got %q", pe.EnvVar)
+	}
+	if pe.Value != "xyz" {
+		t.Fatalf("expected value xyz, got %q", pe.Value)
+	}
+	inner := errors.Unwrap(pe)
+	if inner == nil {
+		t.Fatal("expected non-nil inner error from Unwrap")
+	}
+}
+
 func TestRequiredErrorString(t *testing.T) {
 	re := &RequiredError{
 		FieldName: "Host",

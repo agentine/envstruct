@@ -2,7 +2,6 @@ package envstruct
 
 import (
 	"errors"
-	"os"
 	"strings"
 	"testing"
 )
@@ -133,8 +132,7 @@ func TestProcessIgnored(t *testing.T) {
 		Secret string `env:"-"`
 	}
 	setEnv(t, "APP_HOST", "host.com")
-	os.Setenv("APP_SECRET", "should-be-ignored")
-	defer os.Unsetenv("APP_SECRET")
+	setEnv(t, "APP_SECRET", "should-be-ignored")
 
 	var c Config
 	if err := Process("APP", &c); err != nil {

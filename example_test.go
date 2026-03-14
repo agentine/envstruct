@@ -72,6 +72,7 @@ func ExampleUsage() {
 	}
 	_ = envstruct.Usage("APP", &Config{}, os.Stdout)
 	// Output:
+	//   KEY        TYPE    DEFAULT               DESCRIPTION
 	//   APP_HOST   string  [default: localhost]  Server hostname
 	//   APP_PORT   int     [default: 8080]       Server port
 	//   APP_DEBUG  bool                          Enable debug mode

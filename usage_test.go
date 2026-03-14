@@ -31,6 +31,21 @@ func TestUsageBasic(t *testing.T) {
 	}
 }
 
+func TestUsageHeader(t *testing.T) {
+	type Config struct {
+		Host string
+	}
+	var buf bytes.Buffer
+	if err := Usage("APP", &Config{}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	lines := strings.Split(out, "\n")
+	if len(lines) == 0 || !strings.Contains(lines[0], "KEY") || !strings.Contains(lines[0], "TYPE") {
+		t.Fatalf("expected header row with KEY and TYPE, got: %s", out)
+	}
+}
+
 func TestUsageRequired(t *testing.T) {
 	type Config struct {
 		Host string `env:"HOST,required"`
