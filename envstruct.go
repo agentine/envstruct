@@ -141,6 +141,6 @@ func MustProcess(prefix string, spec interface{}) {
 // Usage writes a usage message describing the environment variables
 // expected by spec to the given writer.
 func Usage(prefix string, spec interface{}, out io.Writer) error {
-	return nil
+	return writeUsage(prefix, spec, out)
 }
 

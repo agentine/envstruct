@@ -12,6 +12,7 @@ type fieldSpec struct {
 	DefaultValue string
 	HasDefault   bool
 	Ignored      bool
+	Description  string
 }
 
 // parseTag extracts a fieldSpec from a struct field's tags.
@@ -47,6 +48,11 @@ func parseTag(f reflect.StructField, fieldName string) fieldSpec {
 	if defVal, ok := f.Tag.Lookup("default"); ok {
 		spec.DefaultValue = defVal
 		spec.HasDefault = true
+	}
+
+	// Check desc tag.
+	if desc, ok := f.Tag.Lookup("desc"); ok {
+		spec.Description = desc
 	}
 
 	return spec
