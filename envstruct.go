@@ -5,6 +5,7 @@
 package envstruct
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,8 +28,32 @@ func Process(prefix string, spec interface{}) error {
 	return processStruct(prefix, rv)
 }
 
+// isStructField returns true if the field type is a struct that should be
+// recursed into (not a special type like time.Duration or url.URL, and not
+// implementing Decoder/Setter/TextUnmarshaler).
+func isStructField(ft reflect.Type) bool {
+	// Unwrap pointer.
+	for ft.Kind() == reflect.Ptr {
+		ft = ft.Elem()
+	}
+	if ft.Kind() != reflect.Struct {
+		return false
+	}
+	// Special types treated as scalar.
+	if ft == durationType || ft == urlType {
+		return false
+	}
+	// Check if it implements decode interfaces (use pointer type).
+	pt := reflect.PointerTo(ft)
+	if pt.Implements(decoderType) || pt.Implements(setterType) || pt.Implements(textUnmarshalerType) {
+		return false
+	}
+	return true
+}
+
 func processStruct(prefix string, rv reflect.Value) error {
 	rt := rv.Type()
+	var errs []error
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		fv := rv.Field(i)
@@ -42,6 +67,35 @@ func processStruct(prefix string, rv reflect.Value) error {
 		envName := strings.ToUpper(f.Name)
 		spec := parseTag(f, envName)
 		if spec.Ignored {
+			continue
+		}
+
+		// Check if this is a nested struct field.
+		if isStructField(f.Type) {
+			// Determine the nested prefix.
+			nestedPrefix := spec.Name
+			if f.Anonymous {
+				// Embedded struct: flatten (no prefix added).
+				nestedPrefix = prefix
+			} else if prefix != "" {
+				nestedPrefix = prefix + "_" + spec.Name
+			}
+			nestedPrefix = strings.ToUpper(nestedPrefix)
+
+			if f.Type.Kind() == reflect.Ptr {
+				// Pointer-to-struct: allocate temp, recurse, assign only if
+				// at least one env var was set.
+				tmp := reflect.New(f.Type.Elem())
+				if err := processStruct(nestedPrefix, tmp.Elem()); err != nil {
+					errs = append(errs, err)
+				} else {
+					fv.Set(tmp)
+				}
+			} else {
+				if err := processStruct(nestedPrefix, fv); err != nil {
+					errs = append(errs, err)
+				}
+			}
 			continue
 		}
 
@@ -60,7 +114,8 @@ func processStruct(prefix string, rv reflect.Value) error {
 				val = spec.DefaultValue
 				found = true
 			} else if spec.Required {
-				return &RequiredError{FieldName: f.Name, EnvVar: key}
+				errs = append(errs, &RequiredError{FieldName: f.Name, EnvVar: key})
+				continue
 			}
 		}
 
@@ -70,10 +125,10 @@ func processStruct(prefix string, rv reflect.Value) error {
 
 		// Decode and set the field value.
 		if err := decode(fv, val, f.Name, key); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // MustProcess is like Process but panics on error.
@@ -88,3 +143,4 @@ func MustProcess(prefix string, spec interface{}) {
 func Usage(prefix string, spec interface{}, out io.Writer) error {
 	return nil
 }
+

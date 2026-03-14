@@ -3,6 +3,7 @@ package envstruct
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -215,4 +216,120 @@ func TestMustProcessPanics(t *testing.T) {
 	}()
 	var c Config
 	MustProcess("APP", &c)
+}
+
+// --- Nested struct tests ---
+
+func TestNestedStruct(t *testing.T) {
+	type DB struct {
+		Host string
+		Port int
+	}
+	type Config struct {
+		Database DB
+	}
+	setEnv(t, "APP_DATABASE_HOST", "db.local")
+	setEnv(t, "APP_DATABASE_PORT", "5432")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database.Host != "db.local" {
+		t.Fatalf("expected 'db.local', got %q", c.Database.Host)
+	}
+	if c.Database.Port != 5432 {
+		t.Fatalf("expected 5432, got %d", c.Database.Port)
+	}
+}
+
+func TestThreeLevelNesting(t *testing.T) {
+	type Conn struct {
+		Host string
+	}
+	type DB struct {
+		Primary Conn
+	}
+	type Config struct {
+		Database DB
+	}
+	setEnv(t, "APP_DATABASE_PRIMARY_HOST", "deep.local")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database.Primary.Host != "deep.local" {
+		t.Fatalf("expected 'deep.local', got %q", c.Database.Primary.Host)
+	}
+}
+
+func TestPointerToStruct(t *testing.T) {
+	type DB struct {
+		Host string
+	}
+	type Config struct {
+		Database *DB
+	}
+	setEnv(t, "APP_DATABASE_HOST", "ptr-db.local")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database == nil || c.Database.Host != "ptr-db.local" {
+		t.Fatalf("expected 'ptr-db.local', got %v", c.Database)
+	}
+}
+
+func TestEmbeddedStruct(t *testing.T) {
+	type Common struct {
+		Debug bool
+	}
+	type Config struct {
+		Common
+		Host string
+	}
+	setEnv(t, "APP_HOST", "embedded.local")
+	setEnv(t, "APP_DEBUG", "true")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Host != "embedded.local" {
+		t.Fatalf("expected 'embedded.local', got %q", c.Host)
+	}
+	if !c.Debug {
+		t.Fatal("expected Debug=true")
+	}
+}
+
+func TestNestedCustomPrefix(t *testing.T) {
+	type DB struct {
+		Host string
+	}
+	type Config struct {
+		Database DB `env:"DB"`
+	}
+	setEnv(t, "APP_DB_HOST", "custom.local")
+	var c Config
+	if err := Process("APP", &c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Database.Host != "custom.local" {
+		t.Fatalf("expected 'custom.local', got %q", c.Database.Host)
+	}
+}
+
+func TestMultipleErrorsCollected(t *testing.T) {
+	type Config struct {
+		Host string `env:"HOST,required"`
+		Port int    `env:"PORT,required"`
+	}
+	var c Config
+	err := Process("APP", &c)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "HOST") || !strings.Contains(errStr, "PORT") {
+		t.Fatalf("expected both HOST and PORT errors, got: %s", errStr)
+	}
 }
