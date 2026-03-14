@@ -8,10 +8,14 @@ import (
 )
 
 func ExampleProcess() {
-	os.Setenv("APP_HOST", "localhost")
-	os.Setenv("APP_PORT", "8080")
-	defer os.Unsetenv("APP_HOST")
-	defer os.Unsetenv("APP_PORT")
+	if err := os.Setenv("APP_HOST", "localhost"); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("APP_PORT", "8080"); err != nil {
+		panic(err)
+	}
+	defer func() { _ = os.Unsetenv("APP_HOST") }()
+	defer func() { _ = os.Unsetenv("APP_PORT") }()
 
 	type Config struct {
 		Host string
@@ -28,10 +32,14 @@ func ExampleProcess() {
 }
 
 func ExampleProcess_nested() {
-	os.Setenv("APP_DATABASE_HOST", "db.local")
-	os.Setenv("APP_DATABASE_PORT", "5432")
-	defer os.Unsetenv("APP_DATABASE_HOST")
-	defer os.Unsetenv("APP_DATABASE_PORT")
+	if err := os.Setenv("APP_DATABASE_HOST", "db.local"); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("APP_DATABASE_PORT", "5432"); err != nil {
+		panic(err)
+	}
+	defer func() { _ = os.Unsetenv("APP_DATABASE_HOST") }()
+	defer func() { _ = os.Unsetenv("APP_DATABASE_PORT") }()
 
 	type DB struct {
 		Host string

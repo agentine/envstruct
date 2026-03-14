@@ -64,7 +64,7 @@ func usageStruct(prefix string, rt reflect.Type, tw *tabwriter.Writer) {
 			opts = fmt.Sprintf("[default: %s]", spec.DefaultValue)
 		}
 
-		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", key, typeName, opts, spec.Description)
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", key, typeName, opts, spec.Description)
 	}
 }
 
@@ -77,7 +77,7 @@ func writeUsage(prefix string, spec interface{}, out io.Writer) error {
 		return fmt.Errorf("envstruct: spec must be a struct or pointer to struct")
 	}
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", "KEY", "TYPE", "DEFAULT", "DESCRIPTION")
+	_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", "KEY", "TYPE", "DEFAULT", "DESCRIPTION")
 	usageStruct(prefix, rv.Type(), tw)
 	return tw.Flush()
 }
