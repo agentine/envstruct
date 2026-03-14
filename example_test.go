@@ -70,7 +70,7 @@ func ExampleUsage() {
 		Port  int    `default:"8080" desc:"Server port"`
 		Debug bool   `desc:"Enable debug mode"`
 	}
-	envstruct.Usage("APP", &Config{}, os.Stdout)
+	_ = envstruct.Usage("APP", &Config{}, os.Stdout)
 	// Output:
 	//   APP_HOST   string  [default: localhost]  Server hostname
 	//   APP_PORT   int     [default: 8080]       Server port
