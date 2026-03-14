@@ -68,33 +68,9 @@ func processStruct(prefix string, rv reflect.Value) error {
 			continue
 		}
 
-		// Set the field value (string-only for now, decoders come in Phase 3).
-		if err := setField(fv, val, f.Name, key); err != nil {
+		// Decode and set the field value.
+		if err := decode(fv, val, f.Name, key); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-func setField(fv reflect.Value, val string, fieldName string, envVar string) error {
-	// Handle pointer fields: allocate if nil.
-	if fv.Kind() == reflect.Ptr {
-		if fv.IsNil() {
-			fv.Set(reflect.New(fv.Type().Elem()))
-		}
-		fv = fv.Elem()
-	}
-
-	switch fv.Kind() {
-	case reflect.String:
-		fv.SetString(val)
-	default:
-		return &ParseError{
-			FieldName: fieldName,
-			EnvVar:    envVar,
-			Value:     val,
-			TypeName:  fv.Type().String(),
-			Err:       fmt.Errorf("unsupported type (decoders not yet implemented)"),
 		}
 	}
 	return nil
